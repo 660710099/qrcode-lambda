@@ -28,7 +28,7 @@ dependencies {
     implementation("com.amazonaws:aws-lambda-java-events:3.11.1")
     implementation("com.google.zxing:core:3.5.4")
     implementation("com.google.zxing:javase:3.5.4")
-
+    implementation("software.amazon.awssdk:s3:2.42.4")
     runtimeOnly("com.amazonaws:aws-lambda-java-log4j2:1.5.1")
 }
 
@@ -41,7 +41,7 @@ java {
 
 application {
     // Define the main class for the application.
-    mainClass = "cloud.lambda.qrcode"
+    mainClass = "cloud.lambda.qrcode.LambdaHandler"
 }
 
 tasks.named<Test>("test") {

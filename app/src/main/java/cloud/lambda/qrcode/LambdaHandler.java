@@ -5,6 +5,7 @@ package cloud.lambda.qrcode;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.Map;
 
 import com.amazonaws.services.lambda.runtime.*;
@@ -18,27 +19,45 @@ public class LambdaHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIG
 	public APIGatewayV2HTTPResponse handleRequest(APIGatewayV2HTTPEvent request, Context context) {
 		LambdaLogger logger = context.getLogger();
 		String httpMethod = request.getRequestContext().getHttp().getMethod();
-		if (httpMethod != null && httpMethod.equalsIgnoreCase("PUT")) {
-			logger.log("isBase64: " + request.getIsBase64Encoded());
-			String body = (request.getIsBase64Encoded()) ?
-				new String(Base64.getDecoder().decode(request.getBody()), StandardCharsets.UTF_8) :
-				request.getBody();
-			String path = request.getRawPath();
-			Map<String, String> query = request.getQueryStringParameters();
-			Map<String, String> pathParameter = request.getPathParameters();
+		if (httpMethod != null && (httpMethod.equalsIgnoreCase("PUT") || httpMethod.equalsIgnoreCase("GET"))) {
+			try {
+				String body = (request.getIsBase64Encoded()) ?
+					new String(Base64.getDecoder().decode(request.getBody()), StandardCharsets.UTF_8) :
+					request.getBody();
+				String path = request.getRawPath();
+				Map<String, String> query = request.getQueryStringParameters();
+				Map<String, String> pathParameter = request.getPathParameters();
+			
+				logger.log("This lambda got this request parameter:\n" +
+					   "as-base64: " + request.getIsBase64Encoded() + "\n" + 
+					   "body: " + body + "\n" +
+					   "path: " + path + "\n" +
+					   "query: " + query + "\n" +
+					   "path-parameter: " + pathParameter + "\n");
 
-			return APIGatewayV2HTTPResponse.builder()
-				.withStatusCode(201)
-				.withBody("This lambda got this request parameter:\n" +
-					  "body: " + body + "\n" +
-					  "path: " + path + "\n" +
-					  "query: " + query + "\n" +
-					  "path-parameter: " + pathParameter + "\n")
-				.build();
+				if (body == null || body.isEmpty()) {
+					logger.log("No URL Value.");
+					return APIGatewayV2HTTPResponse.builder()
+						.withStatusCode(400)
+						.withBody("Required URL value in request body to generate qrcode.")
+						.build();
+				}
+			
+				return APIGatewayV2HTTPResponse.builder()
+					.withStatusCode(201)
+					.withIsBase64Encoded(true)
+					.withHeaders(Map.of("Content-Type", "image/png"))
+					.withBody(generator.getQRCode(body))
+					.build();
+			} catch(Exception e) {
+				logger.log(e.getMessage());
+				return APIGatewayV2HTTPResponse.builder()
+					.withStatusCode(500)
+					.withBody(e.getMessage())
+					.build();
+			}
 		}
 
-		logger.log("drop to normal condintion");
-		
 		return APIGatewayV2HTTPResponse.builder()
 			.withStatusCode(200)
 			.withBody("Hello!")
