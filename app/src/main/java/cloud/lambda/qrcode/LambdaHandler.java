@@ -4,26 +4,31 @@
 package cloud.lambda.qrcode;
 
 import com.amazonaws.services.lambda.runtime.*;
+import com.google.common.io.ByteStreams;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.MultiFormatWriter;
-import com.google.zxing.WriterException;
 import com.google.zxing.common.BitMatrix;
 import com.google.zxing.client.j2se.MatrixToImageWriter;
-import  java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
-import java.nio.ByteBuffer;
+import java.util.Base64;
 public class LambdaHandler {
-    public static void main(String[] args) {
-        String msg = "Hello";
-        MultiFormatWriter writer = new MultiFormatWriter();
-        
-        try {
-            BitMatrix matrix = writer.encode(msg, BarcodeFormat.QR_CODE, 1000, 1000);
-            ByteBuffer jpgImageBuffer = ByteBuffer.allocate(1000 * 1000 * 3);
-
-        } catch (WriterException e) {
-            e.printStackTrace();
-            return;
-        }
-    }
+	static String getQRCode(String data) throws Exception {
+		MultiFormatWriter writer = new MultiFormatWriter();
+		ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			
+		BitMatrix matrix = writer.encode(data, BarcodeFormat.QR_CODE, 300, 300);
+		MatrixToImageWriter.writeToStream(matrix, "PNG", baos);
+		byte[] imageData = baos.toByteArray();
+		return Base64.getEncoder().encodeToString(imageData);
+	}
+	
+	public static void main(String[] args) {
+		try {
+			String base64Image = getQRCode("http://google.com");
+			System.out.println(base64Image);
+		} catch (Exception e) {
+			e.printStackTrace();
+			return;
+		}
+	}
 }
