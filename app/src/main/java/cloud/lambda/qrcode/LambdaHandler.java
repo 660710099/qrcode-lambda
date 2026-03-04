@@ -3,32 +3,45 @@
  */
 package cloud.lambda.qrcode;
 
-import com.amazonaws.services.lambda.runtime.*;
-import com.google.common.io.ByteStreams;
-import com.google.zxing.BarcodeFormat;
-import com.google.zxing.MultiFormatWriter;
-import com.google.zxing.common.BitMatrix;
-import com.google.zxing.client.j2se.MatrixToImageWriter;
-import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-public class LambdaHandler {
-	static String getQRCode(String data) throws Exception {
-		MultiFormatWriter writer = new MultiFormatWriter();
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			
-		BitMatrix matrix = writer.encode(data, BarcodeFormat.QR_CODE, 300, 300);
-		MatrixToImageWriter.writeToStream(matrix, "PNG", baos);
-		byte[] imageData = baos.toByteArray();
-		return Base64.getEncoder().encodeToString(imageData);
-	}
+import java.util.Map;
+
+import com.amazonaws.services.lambda.runtime.*;
+import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPEvent;
+import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
+
+public class LambdaHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResponse> {
+	QRCode generator = new QRCode();
 	
-	public static void main(String[] args) {
-		try {
-			String base64Image = getQRCode("http://google.com");
-			System.out.println(base64Image);
-		} catch (Exception e) {
-			e.printStackTrace();
-			return;
+	@Override
+	public APIGatewayV2HTTPResponse handleRequest(APIGatewayV2HTTPEvent request, Context context) {
+		LambdaLogger logger = context.getLogger();
+		String httpMethod = request.getRequestContext().getHttp().getMethod();
+		if (httpMethod != null && httpMethod.equalsIgnoreCase("PUT")) {
+			logger.log("isBase64: " + request.getIsBase64Encoded());
+			String body = (request.getIsBase64Encoded()) ?
+				new String(Base64.getDecoder().decode(request.getBody()), StandardCharsets.UTF_8) :
+				request.getBody();
+			String path = request.getRawPath();
+			Map<String, String> query = request.getQueryStringParameters();
+			Map<String, String> pathParameter = request.getPathParameters();
+
+			return APIGatewayV2HTTPResponse.builder()
+				.withStatusCode(201)
+				.withBody("This lambda got this request parameter:\n" +
+					  "body: " + body + "\n" +
+					  "path: " + path + "\n" +
+					  "query: " + query + "\n" +
+					  "path-parameter: " + pathParameter + "\n")
+				.build();
 		}
+
+		logger.log("drop to normal condintion");
+		
+		return APIGatewayV2HTTPResponse.builder()
+			.withStatusCode(200)
+			.withBody("Hello!")
+			.build();
 	}
 }
