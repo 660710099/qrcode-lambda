@@ -7,6 +7,7 @@
 
 plugins {
     // Apply the application plugin to add support for building a CLI application in Java.
+    eclipse
     application
 }
 
@@ -28,7 +29,8 @@ dependencies {
     implementation("com.amazonaws:aws-lambda-java-events:3.11.1")
     implementation("com.google.zxing:core:3.5.4")
     implementation("com.google.zxing:javase:3.5.4")
-    implementation("software.amazon.awssdk:s3:2.42.4")
+    implementation("software.amazon.awssdk:s3:2.42.6")
+    implementation("software.amazon.awssdk:dynamodb-enhanced:2.42.6")
     runtimeOnly("com.amazonaws:aws-lambda-java-log4j2:1.5.1")
 }
 

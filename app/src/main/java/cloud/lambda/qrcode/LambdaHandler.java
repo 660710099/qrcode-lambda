@@ -4,63 +4,103 @@
 package cloud.lambda.qrcode;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Base64;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
+import java.util.Base64.Decoder;
 
 import com.amazonaws.services.lambda.runtime.*;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
 
+import software.amazon.awssdk.regions.Region;
+
 public class LambdaHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResponse> {
-	QRCode generator = new QRCode();
-	
-	@Override
-	public APIGatewayV2HTTPResponse handleRequest(APIGatewayV2HTTPEvent request, Context context) {
-		LambdaLogger logger = context.getLogger();
-		String httpMethod = request.getRequestContext().getHttp().getMethod();
-		if (httpMethod != null && (httpMethod.equalsIgnoreCase("PUT") || httpMethod.equalsIgnoreCase("GET"))) {
-			try {
-				String body = (request.getIsBase64Encoded()) ?
-					new String(Base64.getDecoder().decode(request.getBody()), StandardCharsets.UTF_8) :
-					request.getBody();
-				String path = request.getRawPath();
-				Map<String, String> query = request.getQueryStringParameters();
-				Map<String, String> pathParameter = request.getPathParameters();
-			
-				logger.log("This lambda got this request parameter:\n" +
-					   "as-base64: " + request.getIsBase64Encoded() + "\n" + 
-					   "body: " + body + "\n" +
-					   "path: " + path + "\n" +
-					   "query: " + query + "\n" +
-					   "path-parameter: " + pathParameter + "\n");
+    QRCode generator = new QRCode();
+    Decoder decoder = Base64.getDecoder();
+    QRCodeMetadata qrcode = new QRCodeMetadata();
+    
+    LambdaLogger logger;
+    S3 s3;
+    
+    String body, path;
+    Map<String, String> query, pathParameter;
+    
+    private void getParameter(APIGatewayV2HTTPEvent request) {
+        this.body = (request.getIsBase64Encoded()) ?
+            new String(decoder.decode(request.getBody()), StandardCharsets.UTF_8) :
+            request.getBody();
+        this.path = request.getRawPath();
+        this.query = request.getQueryStringParameters();
+        this.pathParameter = request.getPathParameters();
+    }
 
-				if (body == null || body.isEmpty()) {
-					logger.log("No URL Value.");
-					return APIGatewayV2HTTPResponse.builder()
-						.withStatusCode(400)
-						.withBody("Required URL value in request body to generate qrcode.")
-						.build();
-				}
-			
-				return APIGatewayV2HTTPResponse.builder()
-					.withStatusCode(201)
-					.withIsBase64Encoded(true)
-					.withHeaders(Map.of("Content-Type", "image/png"))
-					.withBody(generator.getQRCode(body))
-					.build();
-			} catch(Exception e) {
-				logger.log(e.getMessage());
-				return APIGatewayV2HTTPResponse.builder()
-					.withStatusCode(500)
-					.withBody(e.getMessage())
-					.build();
-			}
-		}
+    private void logParameter(APIGatewayV2HTTPEvent request) {
+        logger.log("This lambda got this request parameter:\n" +
+                   "as-base64: " + request.getIsBase64Encoded() + "\n" + 
+                   "body: " + body + "\n" +
+                   "path: " + path + "\n" +
+                   "query: " + query + "\n" +
+                   "path-parameter: " + pathParameter + "\n");
+    }
+    
+    @Override
+    public APIGatewayV2HTTPResponse handleRequest(APIGatewayV2HTTPEvent request, Context context) {
+        logger = context.getLogger();
+        s3 = new S3(Region.US_EAST_1, "qrcode-img"); // will be read by env
+        
+        String httpMethod = request.getRequestContext().getHttp().getMethod();
+        
+        try {
+            if (httpMethod != null && httpMethod.equalsIgnoreCase("PUT")) {
+                getParameter(request);
+                logParameter(request);
+                
+                if (body == null || body.isEmpty()) {
+                    logger.log("No URL Value.");
+                    return APIGatewayV2HTTPResponse.builder()
+                        .withStatusCode(400)
+                        .withBody("Required URL value in request body to generate qrcode.")
+                        .build();
+                }
 
-		return APIGatewayV2HTTPResponse.builder()
-			.withStatusCode(200)
-			.withBody("Hello!")
-			.build();
-	}
+                UUID uuid = UUID.randomUUID();
+                logger.log("uuid: " + uuid + "\n");
+
+                String base64Image = generator.getQRCode(body);
+                byte[] rawImage = decoder.decode(base64Image);
+                s3.uploadQRCode(rawImage, uuid + ".png");
+
+                QRCodeMetadata metadata = new QRCodeMetadata();
+                metadata.setQRCodeID(uuid.toString());
+                metadata.setOriginalURL(body);
+                metadata.setS3PathURL("https://" + s3.getBucketName() + ".s3." + s3.getRegion().toString() + ".amazonaws.com/" + uuid.toString() + ".png");
+                // https://qrcode-img.s3.us-east-1.amazonaws.com/Ubuntu_24.04_VB_LinuxVMImages.COM.vbox
+                metadata.setCount(0);
+                metadata.setDate(Instant.now());
+
+                DynamoDatabase<QRCodeMetadata> database = new DynamoDatabase<>(QRCodeMetadata.class, Region.US_EAST_1);
+                database.putQRCodeMetadata(metadata);
+                
+                return APIGatewayV2HTTPResponse.builder()
+                    .withStatusCode(201)
+                    .withIsBase64Encoded(true)
+                    .withHeaders(Map.of("Content-Type", "image/png"))
+                    .withBody(base64Image)
+                    .build();
+            } else {
+                return APIGatewayV2HTTPResponse.builder()
+                    .withStatusCode(200)
+                    .withBody("Hello!")
+                    .build();
+            }
+        } catch(Exception e) {
+            logger.log(e.getMessage());
+            return APIGatewayV2HTTPResponse.builder()
+                .withStatusCode(500)
+                .withBody(e.getMessage())
+                .build();
+        }
+    }
 }
