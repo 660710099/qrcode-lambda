@@ -13,6 +13,7 @@ import java.util.Base64.Decoder;
 import com.amazonaws.services.lambda.runtime.*;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
+import com.google.gson.Gson;
 
 import software.amazon.awssdk.regions.Region;
 
@@ -20,12 +21,23 @@ public class LambdaHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIG
     QRCode generator = new QRCode();
     Decoder decoder = Base64.getDecoder();
     QRCodeMetadata qrcode = new QRCodeMetadata();
+    final Gson gson = new Gson();
     
     LambdaLogger logger;
     S3 s3;
     
     String body, path;
     Map<String, String> query, pathParameter;
+
+    class ImageResponseMessage {
+        String uuid;
+        String base64Image;
+
+        ImageResponseMessage(String uuid, String base64Image) {
+            this.uuid = uuid;
+            this.base64Image = base64Image;
+        }
+    }
     
     private void getParameter(APIGatewayV2HTTPEvent request) {
         this.body = (request.getIsBase64Encoded()) ?
@@ -49,6 +61,7 @@ public class LambdaHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIG
     public APIGatewayV2HTTPResponse handleRequest(APIGatewayV2HTTPEvent request, Context context) {
         logger = context.getLogger();
         s3 = new S3(Region.US_EAST_1, "qrcode-img"); // will be read by env
+        String redirectBaseUrl = "https://x8ipacz0g0.execute-api.us-east-1.amazonaws.com/default/redirect";
         
         String httpMethod = request.getRequestContext().getHttp().getMethod();
         
@@ -68,9 +81,9 @@ public class LambdaHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIG
                 UUID uuid = UUID.randomUUID();
                 logger.log("uuid: " + uuid + "\n");
 
-                String base64Image = generator.getQRCode(body);
+                String base64Image = generator.getQRCode(redirectBaseUrl + "/" + uuid);
                 byte[] rawImage = decoder.decode(base64Image);
-                s3.uploadQRCode(rawImage, uuid + ".png");
+                s3.upload(rawImage, uuid + ".png");
 
                 QRCodeMetadata metadata = new QRCodeMetadata();
                 metadata.setQRCodeID(uuid.toString());
@@ -82,17 +95,17 @@ public class LambdaHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIG
 
                 DynamoDatabase<QRCodeMetadata> database = new DynamoDatabase<>(QRCodeMetadata.class, Region.US_EAST_1);
                 database.putQRCodeMetadata(metadata);
-                
+
                 return APIGatewayV2HTTPResponse.builder()
                     .withStatusCode(201)
-                    .withIsBase64Encoded(true)
-                    .withHeaders(Map.of("Content-Type", "image/png"))
-                    .withBody(base64Image)
+                    .withIsBase64Encoded(false)
+                    .withHeaders(Map.of("Content-Type", "application/json"))
+                    .withBody(gson.toJson(new ImageResponseMessage(uuid.toString(), base64Image)))
                     .build();
             } else {
                 return APIGatewayV2HTTPResponse.builder()
-                    .withStatusCode(200)
-                    .withBody("Hello!")
+                    .withStatusCode(400)
+                    .withBody("Plase specified URL in body to generate QR Code.")
                     .build();
             }
         } catch(Exception e) {

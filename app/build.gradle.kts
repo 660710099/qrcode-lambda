@@ -31,6 +31,7 @@ dependencies {
     implementation("com.google.zxing:javase:3.5.4")
     implementation("software.amazon.awssdk:s3:2.42.6")
     implementation("software.amazon.awssdk:dynamodb-enhanced:2.42.6")
+    implementation("com.google.code.gson:gson:2.13.2")
     runtimeOnly("com.amazonaws:aws-lambda-java-log4j2:1.5.1")
 }
 

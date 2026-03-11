@@ -16,7 +16,7 @@ public class S3 {
         this.region = region;
     }
     
-    public PutObjectResponse uploadQRCode(byte[] image, String key) throws Exception { 
+    public PutObjectResponse upload(byte[] image, String key) throws Exception { 
         PutObjectRequest por = PutObjectRequest.builder()
             .bucket(bucketName)
             .key(key)
